@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useRef } from "react";
 import Constants from "expo-constants";
 import { Feather as Icon } from "@expo/vector-icons";
 import {
@@ -14,6 +14,7 @@ import { useNavigation, useRoute } from "@react-navigation/native";
 import MapView, { Marker } from "react-native-maps";
 import { SvgUri } from "react-native-svg";
 import * as Location from "expo-location";
+
 import api from "../../services/api";
 
 interface Item {
@@ -37,6 +38,9 @@ interface Params {
 }
 
 const Points = () => {
+  const mapViewRef = useRef<MapView | null>(null);
+  const mapRef = mapViewRef.current as MapView;
+
   const [items, setItems] = useState<Item[]>([]);
   const [selectedItems, setSelectedItems] = useState<number[]>([]);
   const [points, setPoints] = useState<Point[]>([]);
@@ -51,6 +55,7 @@ const Points = () => {
 
   const routeParams = route.params as Params;
 
+  // Allow get current location
   useEffect(() => {
     async function loadPosition() {
       const { status } = await Location.requestPermissionsAsync();
@@ -73,12 +78,14 @@ const Points = () => {
     loadPosition();
   }, []);
 
+  // Get all Items
   useEffect(() => {
     api.get("/items").then((response) => {
       setItems(response.data);
     });
   }, []);
 
+  // Search points on item selected
   useEffect(() => {
     api
       .get("points", {
@@ -90,6 +97,7 @@ const Points = () => {
       })
       .then((response) => {
         setPoints(response.data);
+        test(response.data);
       });
   }, [selectedItems]);
 
@@ -112,6 +120,30 @@ const Points = () => {
     }
   }
 
+  function test(pts: Point[]) {
+    console.log(pts.map((pt) => String(pt.id)));
+    if (pts.length > 0) {
+      console.log("fit map points");
+      mapRef.fitToSuppliedMarkers(
+        pts.map((point) => String(point.id)),
+        { edgePadding: { top: 200, right: 100, bottom: 50, left: 100 } }
+      );
+    } else {
+      console.log(mapViewRef);
+      if (mapViewRef.current !== null) {
+        mapRef.animateToRegion(
+          {
+            latitude: initialPosition[0],
+            longitude: initialPosition[1],
+            latitudeDelta: 0.014,
+            longitudeDelta: 0.014,
+          },
+          1000
+        );
+      }
+    }
+  }
+
   return (
     <>
       <View style={styles.container}>
@@ -127,6 +159,7 @@ const Points = () => {
         <View style={styles.mapContainer}>
           {initialPosition[0] !== 0 && (
             <MapView
+              ref={mapViewRef}
               style={styles.map}
               loadingEnabled={initialPosition[0] === 0}
               initialRegion={{
@@ -135,10 +168,12 @@ const Points = () => {
                 latitudeDelta: 0.014,
                 longitudeDelta: 0.014,
               }}
+              maxZoomLevel={18}
             >
               {points.map((point) => (
                 <Marker
                   key={String(point.id)}
+                  identifier={String(point.id)}
                   onPress={() => {
                     handleNavigateToDetail(point.id);
                   }}
